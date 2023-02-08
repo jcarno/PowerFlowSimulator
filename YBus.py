@@ -36,6 +36,7 @@ class YBus:
             self.buses[bus] = Bus(bus)
             self.bus_order.append(bus)
             self.connection_matrix.reshape(Bus.numBuses,Bus.numBuses)
+            self.yBusM.reshape(Bus.numBuses,Bus.numBuses)
 
     def add_Line(self,name,len,bus1,bus2,code:LineCode=LineCode(),geo:LineGeometry=LineGeometry()):
         self.lines[name] = Line(name,len,bus1,bus2,code,geo)
