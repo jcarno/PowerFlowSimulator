@@ -14,25 +14,25 @@ class YBus:
         self.bus_order: List[str] = list()
         self.buses: Dict[str,Bus] = dict()
         self.connection_matrix=np.matrix([])
-        self.yBusM=np.matrix([])
+        self.yBusM=np.matrix([],complex)
 
         #Line and transformer classes
         self.lines: Dist[str, Line] = dict()
         self.transformers: Dist[str, Transformer] = dict()
 
         #add dictionary for bus voltage bases, in kV
-        self.vBase=13.8
+        self.vBase:float=20
         self.slackBus=None
 
         #SBase in MVA
-        self.SBase=100
+        self.SBase:float=100
 
 #use dictionary to make sure that only new buses are added
     def add_bus(self,bus):
         if bus not in self.buses.keys():
-            #if no buses set a default slack voltage of 13.8kV
+            #if no buses set a default slack voltage of 20kV
             if bus_order.length()==0:
-                set_Slack(bus,13.8)
+                set_Slack(bus,20)
             self.buses[bus] = Bus(bus)
             self.bus_order.append(bus)
             self.connection_matrix.reshape(Bus.numBuses,Bus.numBuses)
@@ -60,15 +60,45 @@ class YBus:
             self.vBase=voltage
             self.slackBus=slackBus
 
-    def findZBase(self,bus1,bus2):
+    def findZBase(self,bus1):
         ind1 = self.bus_order.index(bus1)
-        ind2 = self.bus_order.index(bus2)
+        vMultiplier=1
 
-        #return a failure i buses are not connected
-        if connection_matrix[ind1,ind2]==0 and not ind1==ind2:
-            return 0
+        #Traverse connection matrix to find the equivalent Vbase
 
-        #use other function to get vbase
+        return (self.vBase*vMultiplier)**2/self.sBase
+
+Y = np.zeros((buses, buses))
+#I'm not sure if this is how you step through the list properly, but just wanted to have something down
+ line_list= list(self.lines)
+    for lin in line_list:
+        Zbase = line.bus1
+        z_actual = line.Z
+        y_shunt_actual = line.shuntY
+        z_pu = z_actual/Zbase
+        y_shunt_pu = y_shunt_actual/Zbase
+        index1 = self.bus_order.index(line.bus1)
+        index2 = self.bus_order.index(line.bus2)
+        #might be some redundancies in adding to Y matrix
+        Y[index1, index1] += (y_shunt_pu/2)+(1/z_pu)
+        Y[index2, index2] += (y_shunt_pu/2)+(1/z_pu)
+        Y[index1, index2] -= 1 / z_pu
+        Y[index2, index1] -= 1 / z_pu
+
+xfmr_list = list(self.transformers)
+    for transformer in xfmr_list:
+        zbase = findZbase(bus1)
+        z_actual= (self.transformer.v_1**2)/self.transformer.s_rated
+        X = z_actual*self.transformer.x_r_ratio
+        R = z_actual/self.transformer.x_r_ratio
+        #z_pu = ? not sure how to per unitize and combine the X and R
+        index1 = self.bus_order.index(line.bus1)
+        index2 = self.bus_order.index(line.bus2)
+        #might be some redundancies in adding to matrix
+        Y[index1, index1] += 1 / z_pu
+        Y[index2, index2] += 1 / z_pu
+        Y[index1, index2] -= 1 / z_pu
+        Y[index2, index1] -= 1 / z_pu
 
 
 
