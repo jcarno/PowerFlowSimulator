@@ -1,19 +1,20 @@
 from LineCode import LineCode
 from LineGeometry import LineGeometry
-
+import math
 class Line:
 
-    def __init__(self,len:float,bus1:str,bus2:str,code:LineCode,geo:LineGeometery):
+    def __init__(self,name,len:float,bus1:str,bus2:str,code:LineCode,geo:LineGeometry):
+        self.name=name
         self.len=len
         self.bus1=bus1
-        self.bus2
+        self.bus2=bus2
         self.code=code
         self.geo=geo
         self.ampacity=code.ampacity*geo.nConductors
         self.Z=findZ(len,code,geo)
         self.shuntY=findShuntY(len,code,geo)
 
-    def puZ(self,Zbase):
+    def per_unit_Z(self,Zbase):
         return self.Z/Zbase
 
 #Function to find the lines series impedance values
@@ -34,12 +35,18 @@ def findZ(len:float,code:LineCode,geo:LineGeometry):
     elif (geo.nConductors==1):
         Dsl = code.GMRft
     else:
+        Dsl=1
         print('Number of conductors in bundle given outside of known range for calculation.')
         print('Check line parameters and try again')
 
+    X=(2*math.pi*60)*2E-7*math.log(Deq/Dsl)*1609*len
+
+    return R+1j*X
 
 
-def findShuntY(len,code:LineCode,geo:LineGeometry):
+
+
+def findShuntY(len:float,code:LineCode,geo:LineGeometry):
     # Find Deq and Dsc for shunt capacitance
     Deq = (geo.Dab ** 2 + geo.Dbc ** 2 + geo.Dca ** 2) ** (1.0 / 2.0)
 
@@ -53,6 +60,10 @@ def findShuntY(len,code:LineCode,geo:LineGeometry):
     elif (geo.nConductors == 1):
         Dsc = code.dInches / 2.0 / 12.0
     else:
+        Dsc=1
         print('Number of conductors in bundle given outside of known range for calculation.')
         print('Check line parameters and try again')
 
+    Y = 1j*(2*math.pi*60) * 2 * math.pi * 8.854E-12/(math.log(Deq/Dsc))*1609*len
+
+    return Y

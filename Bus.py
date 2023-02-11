@@ -1,11 +1,9 @@
-#Bus Class to store bus names and total number of buses
-#Modeled after Paulo Radatz's example in class
-
 class Bus:
+    #modeled after Paulo's example class
     numBuses=0
 
     #Initialization of a bus
-    def __int__(self, name):
+    def __init__(self,name):
         self.name=name
         self.index=Bus.numBuses #keep track which bus this is in order of all buses
 
