@@ -226,7 +226,8 @@ class PowerSystem:
 
     #solve yBus matrix using algorithm from class
     def solve(self):
-        self.print_Bus_Voltages()
+
+        #make the YBus Matrix for the system
         self.make_YBus()
 
         #get the known power values at the buses
@@ -270,7 +271,6 @@ class PowerSystem:
                     usedBuses=np.delete(usedBuses,k,0)
 
         deltaX=np.matmul(np.linalg.inv(jacobian),deltaY)
-        printMatrix(deltaX)
         #update the bus voltages and angles
         self.updateBuses(deltaX,usedBuses)
 
