@@ -15,8 +15,8 @@ class YBus:
         #make list and dictionary for buses
         self.bus_order: List[str] = list()
         self.buses: Dict[str,Bus] = dict()
-        self.connection_matrix=np.zeros((100,100),dtype=int)
-        self.yBusM=np.zeros((100,100),dtype=complex)
+        self.connection_matrix=None
+        self.yBusM=None
 
         #Line and transformer classes
         self.lines: Dict[str, Line] = dict()
@@ -35,6 +35,15 @@ class YBus:
             #if no buses set a default slack voltage of 20kV
             if self.bus_order.__len__()==0:
                 self.set_Slack(bus,20)
+                self.connection_matrix=np.zeros((1,1),dtype=int)
+                self.yBusM=np.zeros((1,1),dtype=complex)
+            else:
+                a=np.zeros((1,Bus.numBuses))
+                b=np.zeros((Bus.numBuses+1,1))
+                self.connection_matrix=np.concatenate((self.connection_matrix,a),axis=0)
+                self.connection_matrix=np.concatenate((self.connection_matrix,b),axis=1)
+                self.yBusM = np.concatenate((self.yBusM, a), axis=0)
+                self.yBusM = np.concatenate((self.yBusM, b), axis=1)
 
             #add bus to list and dictionary, while updating connection and size matrices
             self.buses[bus] = Bus(bus)
@@ -77,11 +86,11 @@ class YBus:
     #function to get the zBase at a certain bus
     def findZBase(self,bus1):
         ind1 = self.bus_order.index(bus1)
-        vMultiplier=self.getMultiplier(ind1)
+        vMultiplier=self.getVMultiplier(ind1)
         return (self.vBase*vMultiplier)**2/self.sBase
 
 #get a scalar multiplier to adjust slack bus voltage to be the base voltage for that given bus
-    def getMultiplier(self,indexGoal):
+    def getVMultiplier(self,indexGoal):
         #get total num of buses for looping
         length=Bus.numBuses
 
@@ -145,46 +154,48 @@ class YBus:
                 multiplier*=m
             return multiplier
 
-
-    #solve yBus matrix using algorithm from class
-    def solve(self):
-        #reset yBus Matrix
+    def make_YBus(self):
+        # reset yBus Matrix
         self.yBusM = np.zeros((100, 100), dtype=complex)
 
-        #take dictionary of lines and turn it into a list
-        line_list= list(self.lines.values())
+        # take dictionary of lines and turn it into a list
+        line_list = list(self.lines.values())
 
-        #for each line, get the per unit impedance and admittance and add to the matrix
+        # for each line, get the per unit impedance and admittance and add to the matrix
         for lin in line_list:
             Zbase = self.findZBase(lin.bus1)
             y_shunt_actual = lin.shuntY
             z_pu = lin.per_unit_Z(Zbase)
-            y_shunt_pu = y_shunt_actual/(1/Zbase)
+            y_shunt_pu = y_shunt_actual / (1 / Zbase)
             index1 = self.bus_order.index(lin.bus1)
             index2 = self.bus_order.index(lin.bus2)
 
-
-            #add elements to ybus matrix
-            self.yBusM[index1, index1] += (y_shunt_pu/2)+(1/z_pu)
-            self.yBusM[index2, index2] += (y_shunt_pu/2)+(1/z_pu)
+            # add elements to ybus matrix
+            self.yBusM[index1, index1] += (y_shunt_pu / 2) + (1 / z_pu)
+            self.yBusM[index2, index2] += (y_shunt_pu / 2) + (1 / z_pu)
             self.yBusM[index1, index2] -= 1 / z_pu
             self.yBusM[index2, index1] -= 1 / z_pu
 
-        #repeat process for transformers
+        # repeat process for transformers
         xfmr_list = list(self.transformers.values())
         for xfmr in xfmr_list:
             zbase = self.findZBase(xfmr.bus1)
             z_pu = xfmr.per_unit_Z(zbase)
             index1 = self.bus_order.index(xfmr.bus1)
             index2 = self.bus_order.index(xfmr.bus2)
-            #might be some redundancies in adding to matrix
+            # might be some redundancies in adding to matrix
             self.yBusM[index1, index1] += 1 / z_pu
             self.yBusM[index2, index2] += 1 / z_pu
             self.yBusM[index1, index2] -= 1 / z_pu
             self.yBusM[index2, index1] -= 1 / z_pu
 
+    #solve yBus matrix using algorithm from class
+    def solve(self):
+        self.make_YBus()
+
+
     #funciton to print the matrix
-    def print_matrix(self):
+    def print_YBus(self):
         print('YBus Matrix for ' + self.name)
         output:str=''
         for b in self.bus_order:
@@ -195,6 +206,30 @@ class YBus:
             for c in range(0,Bus.numBuses):
                 output+=str(round(self.yBusM[r,c].real,3)+1j*round(self.yBusM[r,c].imag,3)) + '\t'
             print(output)
+
+
+    #print all bus voltages and angles
+    def print_Bus_Voltages(self):
+        print('Bus Voltages for ' + self.name)
+        output: str = ''
+
+        #print header for all buses
+        for b in self.bus_order:
+            output += b + '\t'
+        print(output)
+        output = ''
+
+        #print all voltage magnitudes
+        for i in range(0, Bus.numBuses):
+            output += str(round(np.absolute(self.buses(self.bus_order(i)).voltage), 3)) + '\t'
+        print(output)
+        output=''
+
+        #print all voltage angles
+        for j in range(0, Bus.numBuses):
+            output += str(round(np.angle(self.buses(self.bus_order(i)).voltage,True), 3)) + '\t'
+        print(output)
+
 def hasVisited(visited:list(),ind):
     if ind in visited:
         return 1

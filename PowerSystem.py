@@ -226,6 +226,7 @@ class PowerSystem:
 
     #solve yBus matrix using algorithm from class
     def solve(self):
+        self.print_Bus_Voltages()
         self.make_YBus()
 
         #get the known power values at the buses
@@ -247,10 +248,9 @@ class PowerSystem:
             else:
                 usedBuses[k][0]=k%Bus.numBuses
                 usedBuses[k][1]=1
-
         #reduce Jacobian
         #cycle through each bus, check for slack and PV buses
-        for k in range(Bus.numBuses*2-1,0,-1):
+        for k in range(Bus.numBuses*2-1,-1,-1):
             busK=None
             #remove all instances of slack bus
             if k<Bus.numBuses:
@@ -269,9 +269,8 @@ class PowerSystem:
                     deltaY = np.delete(deltaY,k,0)
                     usedBuses=np.delete(usedBuses,k,0)
 
-        #determine delta X
-        deltaX=np.linalg.inv(jacobian)*deltaY
-
+        deltaX=np.matmul(np.linalg.inv(jacobian),deltaY)
+        printMatrix(deltaX)
         #update the bus voltages and angles
         self.updateBuses(deltaX,usedBuses)
 
@@ -284,8 +283,8 @@ class PowerSystem:
             busR = self.buses[self.bus_order[k]]
             for n in range(0, Bus.numBuses):
                 busP = self.buses[self.bus_order[n]]
-                P[k] += busR.voltage*busP.voltage*np.real(self.yBusM[k,n])*np.cos(busR.angle - busP.angle - np.angle(self.yBusM[k,n]))
-                Q[k] += busR.voltage*busP.voltage*np.real(self.yBusM[k,n])*np.sin(busR.angle - busP.angle - np.angle(self.yBusM[k,n]))
+                P[k] += busR.voltage*busP.voltage*np.abs(self.yBusM[k,n])*np.cos(busR.angle - busP.angle - np.angle(self.yBusM[k,n]))
+                Q[k] += busR.voltage*busP.voltage*np.abs(self.yBusM[k,n])*np.sin(busR.angle - busP.angle - np.angle(self.yBusM[k,n]))
 
 
         yGuess = np.zeros((len(P)*2,1))
@@ -305,8 +304,8 @@ class PowerSystem:
         f=None
 
         #set jacobian
-        for r in range(0,2*n-1):
-            for c in range(0,2*n-1):
+        for r in range(0,2*n):
+            for c in range(0,2*n):
                 #test for each possiblity for PQV and angle in Jacobian
 
                 #nondiagonial P by angle
@@ -343,10 +342,10 @@ class PowerSystem:
                     busK=self.buses[self.bus_order[r]]
                     f=0
 
-                    for p in range(0,n-1):
-                        if c!=p:
+                    for p in range(0,n):
+                        if r!=p:
                             busN = self.buses[self.bus_order[p]]
-                            f+=self.yBusM[r,p]*busN.voltage*math.sin(busK.angle-busN.angle-np.angle(self.yBusM[r,p]))
+                            f+=np.absolute(self.yBusM[r,p])*busN.voltage*math.sin(busK.angle-busN.angle-np.angle(self.yBusM[r,p]))
 
                     jacobian[r,c]=-f*busK.voltage
 
@@ -354,7 +353,7 @@ class PowerSystem:
                 elif r<n and c>=n and r==c-n:
                     busK = self.buses[self.bus_order[r]]
                     f=0
-                    for p in range(0,n-1):
+                    for p in range(0,n):
                         busN = self.buses[self.bus_order[p]]
                         f+=busN.voltage*np.absolute(self.yBusM[r, p])* math.cos(busK.angle - busN.angle - np.angle(self.yBusM[r, p]))
 
@@ -366,10 +365,10 @@ class PowerSystem:
                     busK = self.buses[self.bus_order[r-n]]
                     f = 0
 
-                    for p in range(0, n - 1):
+                    for p in range(0, n):
                         if c != p:
                             busN = self.buses[self.bus_order[p]]
-                            f += self.yBusM[r-n, p] * busN.voltage * math.cos(busK.angle - busN.angle - np.angle(self.yBusM[r-n, p]))
+                            f += np.absolute(self.yBusM[r-n, p]) * busN.voltage * math.cos(busK.angle - busN.angle - np.angle(self.yBusM[r-n, p]))
 
                     jacobian[r, c] = f * busK.voltage
 
@@ -378,9 +377,9 @@ class PowerSystem:
                     busK = self.buses[self.bus_order[r-n]]
                     f=0
 
-                    for p in range(0,n-1):
+                    for p in range(0,n):
                         busN=self.buses[self.bus_order[p]]
-                        f+=self.yBusM[r-n, p] * busN.voltage * math.sin(busK.angle - busN.angle - np.angle(self.yBusM[r-n, p]))
+                        f+=np.absolute(self.yBusM[r-n, p]) * busN.voltage * math.sin(busK.angle - busN.angle - np.angle(self.yBusM[r-n, p]))
 
                     jacobian[r, c] = f + -busK.voltage*np.absolute(self.yBusM[r-n, c - n])*math.sin(np.angle(self.yBusM[r-n, c - n]))
         return jacobian
@@ -399,31 +398,31 @@ class PowerSystem:
             t=self.buses[g.bus].type
             if t!='S':
                 ind=self.bus_order.index(g.bus)
-                y[ind, 0] = y[ind]+ g.P
+                y[ind, 0] = y[ind]+ g.P/self.sBase
 
                 #only add Q setpoint if the generator is considered PQ
                 if t=='PQ':
-                    y[ind+n,0]=y[ind+n,0]+ g.Q
+                    y[ind+n,0]=y[ind+n,0]+ g.Q/self.sBase
 
         #cycle through all loads
         for l in allLoads:
             ind = self.bus_order.index(l.bus)
-            y[ind, 0] = y[ind, 0] + l.P
-            y[ind + n, 0] = y[ind + n, 0] + l.Q
+            y[ind, 0] = y[ind, 0] - l.P/self.sBase
+            y[ind + n, 0] = y[ind + n, 0] - l.Q/self.sBase
 
         #return result
         return y
 
     #update all voltages and angles
     def updateBuses(self, deltaX, usedBuses):
-        for k in range(0, len(deltaX) - 1):
+        for k in range(0, len(deltaX)):
             ind = int(usedBuses[k][0])
             busR = self.buses[self.bus_order[ind]]
             isVolt = int(usedBuses[k][1])
             if isVolt == 0:
-                busR.angle = deltaX[k][0]
+                busR.angle = busR.angle+deltaX[k][0]
             else:
-                busR.voltage = deltaX[k][0]
+                busR.voltage = busR.voltage+deltaX[k][0]
 
     #funciton to print the matrix
     def print_YBus(self):
@@ -457,9 +456,10 @@ class PowerSystem:
         output=''
 
         #print all voltage angles
-        for j in range(0, Bus.numBuses):
+        for i in range(0, Bus.numBuses):
             output += str(round(np.angle(self.buses[self.bus_order[i]].voltage,True), 3)) + '\t'
         print(output)
+
 
 
 
@@ -468,3 +468,11 @@ def hasVisited(visited:list(),ind):
         return 1
     else:
         return 0
+
+def printMatrix(M):
+
+    for r in range(0,M.shape[0]):
+        output=''
+        for c in range(0,M.shape[1]):
+            output+=str(round(M[r][c],2)) + '\t'
+        print(output)

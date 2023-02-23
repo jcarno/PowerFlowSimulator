@@ -1,3 +1,4 @@
+import math
 class Bus:
     #modeled after Paulo's example class
     numBuses=0
@@ -8,14 +9,14 @@ class Bus:
         self.index=Bus.numBuses #keep track which bus this is in order of all buses
 
         self.voltage:float=v
-        self.angle:float=ang
+        self.angle:float=ang/180*math.pi
         self.type=type
         Bus.numBuses=Bus.numBuses+1
 
     #Function to set the voltage of a bus
     def set_bus_voltage(self,voltage,angle=0):
         self.voltage=voltage
-        self.angle=0
+        self.angle=angle*math.pi/180
 
     def set_type(self,type):
         self.type=type
