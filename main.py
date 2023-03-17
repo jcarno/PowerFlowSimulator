@@ -1,25 +1,73 @@
 #import classes
 from LineCode import LineCode
 from LineGeometry import LineGeometry
-from YBus import YBus
-#initialize partride conductors
-partridge=LineCode('Partridge',0.642,0.0217,460,0.385)
-geo1=LineGeometry(2,1.5,19.5,19.5,39)
+from PowerSystem import PowerSystem
+from Solution import Solution
+from typing import Dict
+import csv
 
-#set up YBus Matrix and Add components
-ybus=YBus('System 1')
-ybus.set_SBase(100)
-ybus.add_Transformer('T1','1','2',20,230,125,0.085,10)
-ybus.add_Line('L2',25,'2','3',partridge,geo1)
-ybus.add_Line('L1',10,'2','4',partridge,geo1)
-ybus.add_Line('L3',20,'3','5',partridge,geo1)
-ybus.add_Line('L4',20,'4','6',partridge,geo1)
-ybus.add_Line('L5',10,'5','6',partridge,geo1)
-ybus.add_Line('L6',35,'4','5',partridge,geo1)
-ybus.add_Transformer('T2','7','6',18,230,200,0.105,12)
-ybus.set_Slack('1',20)
+#set up system
+system1=PowerSystem('System 1')
+system1.set_SBase(100)
+lineCodes: Dict[str,LineCode]=dict()
+lineGeometries: Dict[str,LineGeometry]=dict()
+
+#
+# #read in Data
+#get line codes
+with open('LineCodes.csv') as fp:
+    reader=csv.reader(fp)
+    for row in reader:
+        lineCodes[row[0]]=LineCode(row[0],float(row[1]),float(row[2]),float(row[3]),float(row[4]))
+
+#get Line Geometries
+with open('LineGeometries.csv') as fp:
+    reader = csv.reader(fp)
+    for row in reader:
+        lineGeometries[row[0]] = LineGeometry(float(row[1]), float(row[2]), float(row[3]), float(row[4]),float(row[5]))
+
+#set up Buses
+with open('buses.csv') as fp:
+    reader = csv.reader(fp)
+    for row in reader:
+        system1.add_bus(row[0],(row[3]),float(row[1]),float(row[2]))
+        if (row[3]=='S'):
+            system1.set_Slack(row[0],float(row[4]))
+
+
+#get Generators
+with open('Generators.csv') as fp:
+    reader = csv.reader(fp)
+    for row in reader:
+        system1.add_Generator(row[0],row[1], float(row[2]), float(row[3]), float(row[4]),float(row[5]),float(row[6]))
+
+#get Lines
+with open('Lines.csv') as fp:
+    reader = csv.reader(fp)
+    for row in reader:
+        code=lineCodes[row[4]]
+        geo=LineGeometry()
+        if (lineGeometries.keys().__contains__(row[5])):
+            geo=lineGeometries[row[5]]
+
+        system1.add_Line(row[0],float(row[1]), (row[2]), (row[3]),code,geo)
+
+
+#get Transformers
+with open('Transformers.csv') as fp:
+    reader = csv.reader(fp)
+    for row in reader:
+        system1.add_Transformer(row[0],row[1], (row[2]), float(row[3]), float(row[4]),float(row[5]),float(row[6]),float(row[7]))
+
+# get Loads
+with open('Loads.csv') as fp:
+    reader = csv.reader(fp)
+    for row in reader:
+        system1.add_Load(row[0], row[1], float(row[2]), float(row[3]))
+
+#configure system in solution class
+soln1=Solution(system1)
 
 #solve system and print results
-ybus.solve()
-ybus.print_matrix()
-
+soln1.solveNewtonRaphson()
+system1.print_Results()
