@@ -27,13 +27,15 @@ class Solution:
         # make the YBus Matrix for the system
         self.sys.make_YBus()
 
-        while maxError>self.tolerance and a<self.maxIterations:
+        # get the known power values at the buses
+        yGoal = self.sys.getGivenPower()
 
-            #get the known power values at the buses
-            yGoal=self.getGivenPower()
+        while maxError>self.tolerance and a<self.maxIterations:
 
             #get the calculated power based on guess and determine change in y
             yGuess=self.sys.calculatedPower()
+
+            # get the known power values at the buses
             deltaY=yGoal-yGuess
 
             #reduce deltaY
@@ -53,15 +55,20 @@ class Solution:
 
             #get max error
             maxError=self.getMaxError(deltaY)
-            if maxError<self.tolerance:
-                print(f"Converged in {a} iterations!")
+            if maxError < self.tolerance:
+                overLims = self.checkMvarLims(yGuess)
+                if overLims:
+                    self.sys.setFlatStart()
+                    self.solveNewtonRaphson()
+                else:
+                    print(f"Newton Raphson Converged in {a} iterations!")
             else:
                 #find Jacobian for all buses
                 jacobian=self.getJacobian()
 
                 # set up matrix to show what indeces are useful after eliminating rows and columns
                 usedBuses = np.zeros((Bus.numBuses * 2, 2))
-                for k in range(0, Bus.numBuses * 2 - 1):
+                for k in range(0, Bus.numBuses * 2):
                     if k < Bus.numBuses:
                         usedBuses[k][0] = k % Bus.numBuses
                         usedBuses[k][1] = 0
@@ -96,7 +103,153 @@ class Solution:
 
         if (maxError>self.tolerance):
             print(f"Newton Raphson failed to converge in {self.maxIterations} iterations")
+        elif (not overLims):
+            self.sys.print_Results()
 
+    def solveDCPowerFlow(self):
+        self.sys.make_YBus()
+        self.sys.setFlatStart()
+
+        P = self.sys.getGivenPower()[0:Bus.numBuses]
+        B_bus = np.imag(self.sys.yBusM)
+
+        #reduce P and B
+        for k in range(0,Bus.numBuses):
+            if (self.sys.bus_order[k]==self.sys.slackBus):
+                B_bus=np.delete(B_bus,k,0)
+                B_bus = np.delete(B_bus, k, 1)
+                P=np.delete(P,k,0)
+
+        angle = np.matmul(-np.linalg.pinv(B_bus), P)
+
+        allBuses=list(self.sys.buses.values())
+        ind=self.sys.bus_order.index(self.sys.slackBus)
+        a=0
+        for k in range(0,Bus.numBuses):
+            if k!=self.sys.bus_order.index(self.sys.slackBus):
+                allBuses[k].angle = angle[a]
+                a=a+1
+        self.sys.printDCPwr()
+
+    #do Fast Decoupled Newton Raphson
+    def solveFastDecoupled(self):
+        maxError=self.tolerance+1
+        a=0
+
+        # make the YBus Matrix for the system
+        self.sys.make_YBus()
+
+        # get the known power values at the buses
+        yGoal = self.sys.getGivenPower()
+
+        while maxError>self.tolerance and a<self.maxIterations:
+
+            #get the calculated power based on guess and determine change in y
+            yGuess=self.sys.calculatedPower()
+            deltaY=yGoal-yGuess
+
+            #reduce deltaY
+            #cycle through each bus, check for slack and PV buses
+            for k in range(Bus.numBuses*2-1,-1,-1):
+                busK=None
+                #remove all instances of slack bus
+                if k<Bus.numBuses:
+                    busK=self.sys.buses[self.sys.bus_order[k]]
+                    if busK.type=='S':
+                        deltaY = np.delete(deltaY, k, 0)
+
+                # remove all instances of Q for PV and V for PV
+                else:
+                    busK=self.sys.buses[self.sys.bus_order[k-Bus.numBuses]]
+                    if busK.type=='S' or busK.type=='PV':
+                        deltaY = np.delete(deltaY,k,0)
+
+            #get max error
+            maxError=self.getMaxError(deltaY)
+            if maxError<self.tolerance:
+                overLims=self.checkMvarLims(yGuess)
+                if overLims:
+                    self.sys.setFlatStart()
+                    self.solveFastDecoupled()
+                else:
+                    print(f"Fast Decoupled Newton Raphson Converged in {a} iterations!")
+            else:
+                #find Jacobian for all buses
+                J1=self.getJ1()
+                J4=self.getJ4()
+
+                # set up matrix to show what indeces are useful after eliminating rows and columns
+                usedBuses = np.zeros((Bus.numBuses * 2, 2))
+                for k in range(0, Bus.numBuses * 2):
+                    if k < Bus.numBuses:
+                        usedBuses[k][0] = k % Bus.numBuses
+                        usedBuses[k][1] = 0
+                    else:
+                        usedBuses[k][0] = k % Bus.numBuses
+                        usedBuses[k][1] = 1
+
+                # reduce Jacobian
+                # cycle through each bus, check for slack and PV buses
+                pDim=Bus.numBuses
+                qDim=Bus.numBuses
+
+                # reduce Jacobian
+                # cycle through each bus, check for slack and PV buses
+                for k in range(Bus.numBuses * 2 - 1, -1, -1):
+                    busK = None
+                    # remove all instances of slack bus
+                    if k < Bus.numBuses:
+                        busK = self.sys.buses[self.sys.bus_order[k]]
+                        if busK.type == 'S':
+                            J1 = np.delete(J1, k, 0)
+                            J1 = np.delete(J1, k, 1)
+                            usedBuses = np.delete(usedBuses, k, 0)
+                    # remove all instances of Q for PV and V for PV
+                    else:
+                        nk=k-Bus.numBuses
+                        busK = self.sys.buses[self.sys.bus_order[nk]]
+
+                        if busK.type == 'S' or busK.type == 'PV':
+                            J4 = np.delete(J4, nk, 0)
+                            J4 = np.delete(J4, nk, 1)
+                            usedBuses = np.delete(usedBuses, k, 0)
+
+                pDim=np.size(J1,axis=0)
+                qDim=np.size(J4,axis=0)
+                #invert jacobians and find deltaX
+                deltaP=deltaY[0:pDim]
+                deltaQ=deltaY[pDim:pDim+qDim]
+                deltaA=np.matmul(np.linalg.inv(J1),deltaP)
+                deltaV = np.matmul(np.linalg.inv(J4), deltaQ)
+                deltaX=np.vstack((deltaA,deltaV))
+
+                #update the bus voltages and angles
+                self.updateBuses(deltaX,usedBuses)
+                a=a+1
+
+        if (maxError>self.tolerance):
+            print(f"Fast Decoupled Newton Raphson failed to converge in {a} iterations")
+        elif (not overLims):
+            self.sys.print_Results()
+
+    #check if the mvar limits of a PV bus generator were passed, return true if passed
+    def checkMvarLims(self,yGuess):
+        yGuessActual=yGuess*self.sys.sBase
+        for k in range(0,len(self.sys.generators)):
+            gen=self.sys.generators[k]
+            genBus=self.sys.buses[gen.bus]
+            ind=self.sys.bus_order.index(gen.bus)
+            if (yGuessActual[ind+Bus.numBuses][0]>gen.Q_max and genBus.type=='PV'):
+                print(f'Positive Mvar Limit for Bus {genBus.name} exceeded. Switching to PQ bus and restarting')
+                gen.Q=gen.Q_max
+                genBus.type='PQ'
+                return True
+            elif (yGuessActual[ind+Bus.numBuses][0]<gen.Q_min and genBus.type=='PV'):
+                print(f'Negative Mvar Limit for Bus {genBus.name} exceeded. Switching to PQ bus and restarting')
+                gen.Q=gen.Q_min
+                genBus.type='PQ'
+                return True
+        return False
 
     #function to get the jacobian for the entire system
     def getJacobian(self):
@@ -188,30 +341,75 @@ class Solution:
                     jacobian[r, c] = f + -busK.voltage*np.absolute(self.sys.yBusM[r-n, c - n])*math.sin(np.angle(self.sys.yBusM[r-n, c - n]))
         return jacobian
 
-    # get the power at each bus defined by loads and generators
-    def getGivenPower(self):
-        n = Bus.numBuses
-        y = np.zeros((n * 2, 1))
+    #function to get the first quadrant of the jacobian
+    def getJ1(self):
+        #set up jacobian given size of the system
+        n=Bus.numBuses
+        jacobian=np.zeros((n,n))
+        busK=None
+        busN=None
+        f=None
 
-        # cycle through all generators
-        for g in self.sys.generators:
-            t=self.sys.buses[g.bus].type
-            if t!='S':
-                ind=self.sys.bus_order.index(g.bus)
-                y[ind, 0] = y[ind]+ g.P/self.sys.sBase
+        #set jacobian
+        for r in range(0,n):
+            for c in range(0,n):
+                #test for each possiblity for PQV and angle in Jacobian
 
-                #only add Q setpoint if the generator is considered PQ
-                if t=='PQ':
-                    y[ind+n,0]=y[ind+n,0]+ g.Q/self.sys.sBase
+                #nondiagonial P by angle
+                if r!=c:
+                    busK=self.sys.buses[self.sys.bus_order[r]]
+                    busN=self.sys.buses[self.sys.bus_order[c]]
+                    f=busK.voltage*busN.voltage*np.absolute(self.sys.yBusM[r,c])
+                    jacobian[r,c]=f*math.sin(busK.angle-busN.angle-np.angle(self.sys.yBusM[r,c]))
 
-        #cycle through all loads
-        for l in self.sys.loads:
-            ind = self.sys.bus_order.index(l.bus)
-            y[ind, 0] = y[ind, 0] - l.P/self.sys.sBase
-            y[ind + n, 0] = y[ind + n, 0] - l.Q/self.sys.sBase
+                #diagonal P by angle
+                else:
+                    busK=self.sys.buses[self.sys.bus_order[r]]
+                    f=0
 
-        #return result
-        return y
+                    for p in range(0,n):
+                        if r!=p:
+                            busN = self.sys.buses[self.sys.bus_order[p]]
+                            f+=np.absolute(self.sys.yBusM[r,p])*busN.voltage*math.sin(busK.angle-busN.angle-np.angle(self.sys.yBusM[r,p]))
+
+                    jacobian[r,c]=-f*busK.voltage
+
+
+        return jacobian
+
+    #function to get the fourth quadrant of the jacobian
+    def getJ4(self):
+        #set up jacobian given size of the system
+        n=Bus.numBuses
+        jacobian=np.zeros((n,n))
+        busK=None
+        busN=None
+        f=None
+
+        #set jacobian
+        for r in range(0,n):
+            for c in range(0,n):
+                #get each value of Q by voltage in jacobian 4th quadrant
+
+                #nondiagonal Q by Voltage
+                if r != c :
+                    busK = self.sys.buses[self.sys.bus_order[r]]
+                    busN = self.sys.buses[self.sys.bus_order[c]]
+                    f = busK.voltage * np.absolute(self.sys.yBusM[r, c])
+                    jacobian[r, c] = f * math.sin(busK.angle - busN.angle - np.angle(self.sys.yBusM[r, c]))
+
+                #diagonal Q by Voltage
+                else:
+                    busK = self.sys.buses[self.sys.bus_order[r]]
+                    f=0
+
+                    for p in range(0,n):
+                        busN=self.sys.buses[self.sys.bus_order[p]]
+                        f+=np.absolute(self.sys.yBusM[r, p]) * busN.voltage * math.sin(busK.angle - busN.angle - np.angle(self.sys.yBusM[r, p]))
+
+                    jacobian[r, c] = f + -busK.voltage*np.absolute(self.sys.yBusM[r, c])*math.sin(np.angle(self.sys.yBusM[r, c]))
+        return jacobian
+
 
     #update all voltages and angles
     def updateBuses(self, deltaX, usedBuses):

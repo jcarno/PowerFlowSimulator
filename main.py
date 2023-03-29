@@ -69,5 +69,14 @@ with open('Loads.csv') as fp:
 soln1=Solution(system1)
 
 #solve system and print results
+system1.setFlatStart()
+print('Newton Raphson Solver:')
 soln1.solveNewtonRaphson()
-system1.print_Results()
+print('-----------------------------------------------------')
+system1.setFlatStart()
+print('Fast Decoupled Newton Raphson Solver:')
+soln1.solveFastDecoupled()
+print('-----------------------------------------------------')
+system1.setFlatStart()
+print('DC Power Flow Solver:')
+soln1.solveDCPowerFlow()
