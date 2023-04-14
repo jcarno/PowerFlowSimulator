@@ -39,7 +39,7 @@ with open('buses.csv') as fp:
 with open('Generators.csv') as fp:
     reader = csv.reader(fp)
     for row in reader:
-        system1.add_Generator(row[0],row[1], float(row[2]), float(row[3]), float(row[4]),float(row[5]),float(row[6]))
+        system1.add_Generator(row[0],row[1], float(row[2]), float(row[3]), float(row[4]),float(row[5]),float(row[6]),float(row[7]),float(row[9]),float(row[10]),float(row[11]),bool(row[12]),float(row[13]))
 
 #get Lines
 with open('Lines.csv') as fp:
@@ -57,7 +57,7 @@ with open('Lines.csv') as fp:
 with open('Transformers.csv') as fp:
     reader = csv.reader(fp)
     for row in reader:
-        system1.add_Transformer(row[0],row[1], (row[2]), float(row[3]), float(row[4]),float(row[5]),float(row[6]),float(row[7]))
+        system1.add_Transformer(row[0],row[1], (row[2]), float(row[3]), float(row[4]),float(row[5]),float(row[6]),float(row[7]),row[8],row[9],float(row[10]),float(row[11]))
 
 # get Loads
 with open('Loads.csv') as fp:
@@ -68,6 +68,17 @@ with open('Loads.csv') as fp:
 #configure system in solution class
 soln1=Solution(system1)
 
-#solve system and print results
-soln1.solveNewtonRaphson()
-system1.print_Results()
+# #solve system and print results
+# system1.setFlatStart()
+# print('Newton Raphson Solver:')
+# soln1.solveNewtonRaphson()
+# print('-----------------------------------------------------')
+# system1.setFlatStart()
+# print('Fast Decoupled Newton Raphson Solver:')
+# soln1.solveFastDecoupled()
+# print('-----------------------------------------------------')
+# system1.setFlatStart()
+# print('DC Power Flow Solver:')
+# soln1.solveDCPowerFlow()
+system1.get_ZBus012()
+system1.print_ZBuses()
