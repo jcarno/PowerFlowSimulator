@@ -23,6 +23,8 @@ The simulator supports the following analyses:
 - Line to Ground Fault
 - Double Line to Ground Fault
 
-See the user manual for more details about the program's operation
+See the user manual for more details about the program's operation.
 
 To run an example, download all CSV and PY files and run the program. 
+
+All program functionality was verified using PowerWorld Simulator.
