@@ -311,14 +311,6 @@ class PowerSystem:
 
             if gen.grounded:
                 yBus0[index1, index1] += 1 / (1j * gen.Xg0 * zbaseOld / zbaseNew + 3*gen.groundingZ / zbaseNew)
-        print(' ')
-        printMatrix(yBus0)
-        print(' ')
-        print(' ')
-        printMatrix(yBus1)
-        print(' ')
-        print(' ')
-        printMatrix(yBus2)
 
         self.zBus0=np.linalg.pinv(yBus0)
         self.zBus1 = np.linalg.pinv(yBus1)
@@ -383,7 +375,8 @@ class PowerSystem:
         bus_angles = self.get_Volt_Angles()
         # self.print_Bus_Voltages()
         bf = pd.DataFrame()
-        bf['Voltage (kV)'] = bus_volts.flatten()
+        bf['Name']=self.bus_order
+        bf['Voltage (pu)'] = bus_volts.flatten()
         bf['Angle (deg)'] = bus_angles.flatten()
         bf.index = range(1, len(self.bus_order) + 1)
         bf.index.name = 'Bus'
@@ -399,6 +392,7 @@ class PowerSystem:
         real = powers[:half]
         reactive = powers[half:]
         df = pd.DataFrame()
+        df['Name']=self.bus_order
         df['Real (MW)'] = real.flatten()
         df['Reactive (Mvar)'] = reactive.flatten()
         df.index = range(1, len(df)+1)
@@ -412,17 +406,21 @@ class PowerSystem:
         currentMag = self.getCurrentMag(lineCurrents)
         currentangles = self.getCurrentAngles(lineCurrents)
         fromToBus = self.getCurrentDirections()
+        names: List[str] = list()
+        for k in range(0, len(self.lines)):
+            names.append(self.lines[k].name)
         #col1_data = currentMag[1, :]
         #col2_data = currentangles[1, :]
         #Print Current and Angles
-        frombus = fromToBus[:, 0]
-        tobus = fromToBus[:, 1]
+        frombus = (fromToBus[:, 0])
+        tobus = (fromToBus[:, 1])
         print('Line Currents and Angles:')
         cf = pd.DataFrame()
+        cf['Name'] = names
         cf['Current (A)'] = currentMag.flatten()
         cf['Angle (deg)'] = currentangles.flatten()
-        cf['From Bus'] = frombus.flatten()
-        cf['To Bus'] = tobus.flatten()
+        cf['From Bus'] = (frombus.flatten())
+        cf['To Bus'] = (tobus.flatten())
         cf.index = range(1, len(self.lines)+1)
         cf.index.name = 'Line'
         print(cf)
@@ -430,31 +428,41 @@ class PowerSystem:
 
         #Print Ampacity
         print('Transmission Line Ampacity:')
-        af = pd.DataFrame(percentAmpacity)
-        af.columns = ['% Ampacity']
+        af = pd.DataFrame()
+        af['Name'] = names
+        af['% Ampacity']=percentAmpacity
         af.index = range(1, len(af)+1)
         af.index.name = 'Line'
         print(af)
         print('')
-        # df = pd.DataFrame(lineCurrents)
-        # df.columns = ['Line', 'Current (A)']
-        # print(df)
+
 
         # Total Power Losses
         print('Transmission Line Power Losses:')
         lineLosses = self.getLineLosses()
-        lf = pd.DataFrame(lineLosses)
-        lf.columns = ['Losses (kW)']
+        lf=pd.DataFrame()
+        lf['Name'] = names
+        lf['Losses (kW)']=lineLosses
         lf.index = range(1, len(lf)+1)
         lf.index.name = 'Line'
         print(lf)
         print('')
 
         #Transformer Power Losses
+        xfmrNames:List[str]=list()
+        xfmrBus1=np.zeros(len(self.transformers),dtype=int)
+        xfmrBus2=np.zeros(len(self.transformers),dtype=int)
+        for k in range(0,len(self.transformers)):
+            xfmrNames.append(self.transformers[k].name)
+            xfmrBus1[k]=self.transformers[k].bus1
+            xfmrBus2[k]=self.transformers[k].bus2
         xfmrLosses = self.getXfmrLosses()
         print('Transformer Power Losses:')
-        xf = pd.DataFrame(xfmrLosses)
-        xf.columns = ['Losses (kW)']
+        xf = pd.DataFrame()
+        xf['Name'] = xfmrNames
+        xf['Bus 1']=xfmrBus1
+        xf['Bus 2']=xfmrBus2
+        xf['Losses (kW)']=xfmrLosses
         xf.index = range(1, len(xf)+1)
         xf.index.name = 'Transformer'
         print(xf)
@@ -484,7 +492,7 @@ class PowerSystem:
         return currentMag
 
     def getCurrentDirections(self):
-        fromToBuses = np.zeros((len(self.lines), 2))
+        fromToBuses = np.zeros((len(self.lines), 2),dtype=int)
         for k in range(0, len(self.lines)):
             bus1 = self.lines[k].bus1
             bus2 = self.lines[k].bus2
@@ -522,7 +530,8 @@ class PowerSystem:
         # self.print_Bus_Voltages()
         real = powers[:half]
         bf = pd.DataFrame()
-        bf['Voltage (kV)'] = bus_volts.flatten()
+        bf['Name'] = self.bus_order
+        bf['Voltage (pu)'] = bus_volts.flatten()
         bf['Angle (deg)'] = bus_angles.flatten()
         bf['Power (MW)'] = real.flatten()
         bf.index = range(1, len(self.bus_order) + 1)
@@ -531,18 +540,19 @@ class PowerSystem:
         print('')
 
         # Print Line currents and angles
+        names:List[str] = list()
+        for k in range(0, len(self.lines)):
+            names.append(self.lines[k].name)
         lineCurrents = self.getLineCurrents()
         percentAmpacity = self.getAmpacityPercent(lineCurrents)
         currentMag = self.getCurrentMag(lineCurrents)
         currentangles = self.getCurrentAngles(lineCurrents)
         fromToBus = self.getCurrentDirections()
-        # col1_data = currentMag[1, :]
-        # col2_data = currentangles[1, :]
-        # Print Current and Angles
-        frombus = fromToBus[:, 0]
-        tobus = fromToBus[:, 1]
+        frombus = (fromToBus[:, 0])
+        tobus = (fromToBus[:, 1])
         print('Line Currents and Angles:')
         cf = pd.DataFrame()
+        cf['Name'] =names
         cf['Current (A)'] = currentMag.flatten()
         cf['Angle (deg)'] = currentangles.flatten()
         cf['From Bus'] = frombus.flatten()
@@ -630,27 +640,6 @@ class PowerSystem:
             bus_angles[i] = (np.round(self.buses[self.bus_order[i]].angle*180/math.pi, 3))
         return bus_angles
 
-    #print all bus voltages and angles
-    # def print_Bus_Voltages(self):
-    #     print('Bus Voltages for ' + self.name)
-    #     output: str = ''
-    #
-    #     #print header for all buses
-    #     for b in self.bus_order:
-    #         output += b + '\t'
-    #     print(output)
-    #     output = ''
-    #
-    #     #print all voltage magnitudes
-    #     for i in range(0, Bus.numBuses):
-    #         output += str(round(np.absolute(self.buses[self.bus_order[i]].voltage), 3)) + '\t'
-    #     print(output)
-    #     output=''
-    #
-    #     #print all voltage angles
-    #     for i in range(0, Bus.numBuses):
-    #         output += str(round(self.buses[self.bus_order[i]].angle*180/math.pi, 3)) + '\t'
-    #     print(output)
 
 #get the current Power Injection based on V and angle
     def calculatedPower(self):

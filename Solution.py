@@ -6,6 +6,7 @@ from Line import Line
 from Transformer import Transformer
 import math
 import numpy as np
+import pandas as pd
 
 class Solution:
 
@@ -13,6 +14,7 @@ class Solution:
         self.sys=sys
         self.tolerance=0.0001
         self.maxIterations=50
+        self.convertedGenerators: List[Generator]=list()
 
     def setTolerance(self,tolerance):
         self.tolerance=tolerance
@@ -239,17 +241,40 @@ class Solution:
             gen=self.sys.generators[k]
             genBus=self.sys.buses[gen.bus]
             ind=self.sys.bus_order.index(gen.bus)
-            if (yGuessActual[ind+Bus.numBuses][0]>gen.Q_max and genBus.type=='PV'):
+
+            loading=0
+            for l in range(0,len(self.sys.loads)):
+                if self.sys.loads[l].bus==genBus.name:
+                    loading=loading-self.sys.loads[l].Q
+
+            if (yGuessActual[ind+Bus.numBuses][0]>gen.Q_max+loading and genBus.type=='PV'):
                 print(f'Positive Mvar Limit for Bus {genBus.name} exceeded. Switching to PQ bus and restarting')
                 gen.Q=gen.Q_max
                 genBus.type='PQ'
+                gen.vControl = False
+                self.convertedGenerators.append(gen)
                 return True
-            elif (yGuessActual[ind+Bus.numBuses][0]<gen.Q_min and genBus.type=='PV'):
+            elif (yGuessActual[ind+Bus.numBuses][0]<gen.Q_min+loading and genBus.type=='PV'):
                 print(f'Negative Mvar Limit for Bus {genBus.name} exceeded. Switching to PQ bus and restarting')
                 gen.Q=gen.Q_min
                 genBus.type='PQ'
+                gen.vControl=False
+                self.convertedGenerators.append(gen)
                 return True
         return False
+
+    #reset buses and generators that were switched to PQ
+    def resetBusesAndGenerators(self):
+        for k in range(0,len(self.convertedGenerators)):
+            gen=self.convertedGenerators[k]
+            genBus=self.sys.buses[gen.bus]
+
+            if (genBus.type=='PQ'):
+                genBus.type=='PV'
+                gen.vControl=True
+                gen.Q=0
+        self.convertedGenerators.clear()
+
 
     #function to get the jacobian for the entire system
     def getJacobian(self):
@@ -423,10 +448,131 @@ class Solution:
                 busR.voltage = busR.voltage+deltaX[k][0]
 
 
-    def getMaxError(self,deltaY):
+    def print_fault_v_i(self, index1, Vabc, faultcurrentsabc):
+
+        print('Bus Voltages:')
+        VA = np.round(Vabc[:, 0],3)
+        Vaangle = np.round(Vabc[:, 1],3)
+        VB = np.round(Vabc[:, 2],3)
+        Vbangle = np.round(Vabc[:, 3],3)
+        VC = np.round(Vabc[:, 4],3)
+        Vcangle = np.round(Vabc[:, 5],3)
+        pf = pd.DataFrame()
+        pf.index.name = 'Bus'
+        pf.index = range(1, len(self.sys.bus_order) + 1)
+        pf['|Va| (pu)'] = VA.flatten()
+        pf['/_Va (deg)'] = Vaangle.flatten()
+        pf['|Vb| (pu)'] = VB.flatten()
+        pf['/_Vb (deg)'] = Vbangle.flatten()
+        pf['|Vc| (pu)'] = VC.flatten()
+        pf['/_Vc (deg)'] = Vcangle.flatten()
+        print(pf)
+
+        print('')
+        print('Subtransient Current at Faulted Bus:')
+        currenta = faultcurrentsabc[:, 0]
+        currentanglea = faultcurrentsabc[:, 1]
+        currentb = faultcurrentsabc[:, 2]
+        currentangleb = faultcurrentsabc[:, 3]
+        currentc = faultcurrentsabc[:, 4]
+        currentanglec = faultcurrentsabc[:, 5]
+        start = index1
+        cf = pd.DataFrame()
+        cf.index = range(start+1, start+2)
+        cf.index.name = 'Bus'
+        #cf.set_index(index_value, 50)
+        #cf.set_index(pd.Index(range(start, 50)), inplace=True)
+        cf['|Ia| (pu)'] = currenta.flatten()
+        cf['/_Ia (deg)'] = currentanglea.flatten()
+        cf['|Ib| (pu)'] = currentb.flatten()
+        cf['/_Ib (deg)'] = currentangleb.flatten()
+        cf['|Ic| (pu)'] = currentc.flatten()
+        cf['/_Ic (deg)'] = currentanglec.flatten()
+        print(cf)
+
+
+    def solveSymmetricalFault(self, index1, Vf):
+        V012 = np.zeros((Bus.numBuses, 3), dtype=complex)
+        faultcurrentpos: complex = Vf / (self.sys.zBus1[index1, index1])
+        faultcurrentneg: complex = 0
+        faultcurrentzero: complex = 0
+        faultcurrents012 = np.matrix([faultcurrentzero, faultcurrentpos, faultcurrentneg])
+        for k in range(0, Bus.numBuses):
+            V012[k, 0] = 0 - self.sys.zBus0[k, index1] * faultcurrentzero
+            V012[k, 1] = Vf - self.sys.zBus1[k, index1] * faultcurrentpos
+            V012[k, 2] = 0 - self.sys.zBus0[k, index1] * faultcurrentneg
+        faultcurrentsabc = self.get012toabc(faultcurrents012)
+        Vabc = self.get012toabc(V012)
+
+        self.print_fault_v_i(index1,Vabc, faultcurrentsabc)
+
+    def solveLineToLineFault(self, index1, Vf, Zf):
+        Zf = Zf / self.sys.findZBase(self.sys.bus_order[index1])
+        V012 = np.zeros((Bus.numBuses, 3), dtype=complex)
+        faultcurrentpos = Vf / (self.sys.zBus1[index1, index1] + self.sys.zBus2[index1, index1] + Zf)
+        faultcurrentneg = -faultcurrentpos
+        faultcurrentzero = 0
+        faultcurrents012 = np.matrix([faultcurrentzero, faultcurrentpos, faultcurrentneg])
+        for k in range(0, Bus.numBuses):
+            V012[k, 0] = 0 - self.sys.zBus0[k, index1] * faultcurrentzero
+            V012[k, 1] = Vf - self.sys.zBus1[k, index1] * faultcurrentpos
+            V012[k, 2] = 0 - self.sys.zBus0[k, index1] * faultcurrentneg
+        faultcurrentsabc = self.get012toabc(faultcurrents012)
+        Vabc = self.get012toabc(V012)
+
+        self.print_fault_v_i(index1,Vabc, faultcurrentsabc)
+
+    def solveLineToGroundFault(self, index1, Vf, Zf):
+        Zf = Zf / self.sys.findZBase(self.sys.bus_order[index1])
+        V012 = np.zeros((Bus.numBuses, 3), dtype=complex)
+        faultcurrentpos = Vf / (
+                    self.sys.zBus1[index1, index1] + self.sys.zBus2[index1, index1] + self.sys.zBus0[index1, index1] + 3 * Zf)
+        faultcurrentneg = faultcurrentpos
+        faultcurrentzero = faultcurrentpos
+        faultcurrents012 = np.matrix([faultcurrentzero, faultcurrentpos, faultcurrentneg])
+        for k in range(0, Bus.numBuses):
+            V012[k, 0] = 0 - self.sys.zBus0[k, index1] * faultcurrentzero
+            V012[k, 1] = Vf - self.sys.zBus1[k, index1] * faultcurrentpos
+            V012[k, 2] = 0 - self.sys.zBus0[k, index1] * faultcurrentneg
+        faultcurrentsabc = self.get012toabc(faultcurrents012)
+        Vabc = self.get012toabc(V012)
+
+        self.print_fault_v_i(index1,Vabc, faultcurrentsabc)
+
+    def solveDoubleLineToGroundFault(self, index1, Vf, Zf):
+        Zf = Zf / self.sys.findZBase(self.sys.bus_order[index1])
+        V012 = np.zeros((Bus.numBuses, 3), dtype=complex)
+        faultcurrentpos = Vf / (self.sys.zBus1[index1, index1] + ((self.sys.zBus2[index1, index1] * (self.sys.zBus0[index1, index1] + 3 * Zf)) / (self.sys.zBus2[index1, index1] + self.sys.zBus0[index1, index1] + 3 * Zf)))
+        faultcurrentneg = (-1 * faultcurrentpos) * (((self.sys.zBus0[index1, index1] + 3 * Zf)) / (self.sys.zBus0[index1, index1] + 3 * Zf + self.sys.zBus2[index1, index1]))
+        faultcurrentzero = (-1 * faultcurrentpos) * (self.sys.zBus2 / (self.sys.zBus0[index1, index1] + 3 * Zf + self.sys.zBus2[index1, index1]))
+        faultcurrents012 = np.matrix([faultcurrentzero, faultcurrentpos, faultcurrentneg])
+        for k in range(0, Bus.numBuses):
+            V012[k, 0] = 0 - self.sys.zBus0[k, index1] * faultcurrentzero
+            V012[k, 1] = Vf - self.sys.zBus1[k, index1] * faultcurrentpos
+            V012[k, 2] = 0 - self.sys.zBus0[k, index1] * faultcurrentneg
+        faultcurrentsabc = self.sys.get012toabc(faultcurrents012)
+        Vabc = self.get012toabc(V012)
+
+        self.print_fault_v_i(index1,Vabc, faultcurrentsabc)
+
+    def get012toabc(self, k012):
+        numrows = np.size(k012, axis=0)
+        Kabc = np.zeros((numrows, 6), dtype=float)
+        a = np.cos((2 / 3) * math.pi) + 1j * np.sin((2 / 3) * math.pi)
+        for k in range(0, numrows):
+            Ka = k012[k, 0] + k012[k, 1] + k012[k, 2]
+            Kb = k012[k, 0] + k012[k, 1] * a ** 2 + k012[k, 2] * a
+            Kc = k012[k, 0] + k012[k, 1] * a + k012[k, 2] * a ** 2
+            Kabc[k, 0] = np.abs(Ka)
+            Kabc[k, 1] = np.angle(Ka) * (180 / math.pi)
+            Kabc[k, 2] = np.real(np.abs(Kb))
+            Kabc[k, 3] = np.angle(Kb) * (180 / math.pi)
+            Kabc[k, 4] = np.abs(Kc)
+            Kabc[k, 5] = np.angle(Kc) * (180 / math.pi)
+        return Kabc
+
+    def getMaxError(self, deltaY):
         return np.max(np.absolute(deltaY))
-
-
 
 def adjustAngleRange(angle):
     if (angle<math.pi and angle>-math.pi):
