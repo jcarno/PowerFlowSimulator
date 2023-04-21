@@ -7,8 +7,9 @@ Power Systems are created using .CSV files to outline the system parameters for:
 - Loads
 - Transformers
 - Transmission Lines
-   (- Line Codes)
-   (- Line Geometries)
+- Line Codes
+- Line Geometries
+
 The formatting of these files can be found in the User Manual for this program. Change these files to configure any power system.
 The implementation of these classes can be found in the corresponding .PY class files
 
