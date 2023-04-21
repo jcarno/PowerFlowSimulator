@@ -11,7 +11,7 @@ Power Systems are created using .CSV files to outline the system parameters for:
 - Line Geometries
 
 The formatting of these files can be found in the User Manual for this program. Change these files to configure any power system.
-The implementation of these classes can be found in the corresponding .PY class files and is outlined in the Documention.pdf file.
+The implementation of these classes can be found in the corresponding .PY class files and is outlined in the Python Code Documention.pdf file.
 
 For any run of the simulator, launch the main file, and a menu will allow a user to run power flow and fault anaylses.
 The simulator supports the following analyses:
