@@ -28,7 +28,7 @@ with open('LineGeometries.csv') as fp:
         lineGeometries[row[0]] = LineGeometry(float(row[1]), float(row[2]), float(row[3]), float(row[4]),float(row[5]))
 
 #set up Buses
-with open('buses.csv') as fp:
+with open('Buses.csv') as fp:
     reader = csv.reader(fp)
     for row in reader:
         system1.add_bus(row[0],(row[3]),float(row[1]),float(row[2]))
