@@ -40,7 +40,7 @@ with open('Buses.csv') as fp:
 with open('Generators.csv') as fp:
     reader = csv.reader(fp)
     for row in reader:
-        system1.add_Generator(row[0],row[1], float(row[2]), float(row[3]), float(row[4]),float(row[5]),float(row[6]),float(row[7]),float(row[9]),float(row[10]),float(row[11]),bool(row[12]),float(row[13]))
+        system1.add_Generator(row[0],row[1], float(row[2]), float(row[3]), float(row[4]),float(row[5]),float(row[6]),float(row[7]),float(row[9]),float(row[10]),float(row[11]),bool(row[12]),complex(row[13]))
 
 #get Lines
 with open('Lines.csv') as fp:
@@ -58,7 +58,7 @@ with open('Lines.csv') as fp:
 with open('Transformers.csv') as fp:
     reader = csv.reader(fp)
     for row in reader:
-        system1.add_Transformer(row[0],row[1], (row[2]), float(row[3]), float(row[4]),float(row[5]),float(row[6]),float(row[7]),row[8],row[9],float(row[10]),float(row[11]))
+        system1.add_Transformer(row[0],row[1], (row[2]), float(row[3]), float(row[4]),float(row[5]),float(row[6]),float(row[7]),row[8],row[9],complex(row[10]),complex(row[11]))
 
 # get Loads
 with open('Loads.csv') as fp:
@@ -150,18 +150,21 @@ while True:
             if sChoice != '0' and sChoice != '1' and sChoice != '2' and sChoice != '3' and sChoice!='4':
                 print('Invalid Choice. Try again.')
 
-        print('')
-        #get the faulted bus
-        busName=input('Enter name of faulted bus: ')
-        busFound=True
-        index1=-1
-        if not busName in system1.buses:
-            print('Bus ' + busName + ' not found.')
-            print('Returning to main menu')
-            busFound=False
-        else:
-            # get index
-            index1 = system1.bus_order.index(busName)
+        busFound=False
+
+        if sChoice!='0':
+            print('')
+            # get the faulted bus
+            busName = input('Enter name of faulted bus: ')
+            busFound = True
+            index1 = -1
+            if not busName in system1.buses:
+                print('Bus ' + busName + ' not found.')
+                print('Returning to main menu')
+                busFound = False
+            else:
+                # get index
+                index1 = system1.bus_order.index(busName)
 
 
         # run the power flow solver
